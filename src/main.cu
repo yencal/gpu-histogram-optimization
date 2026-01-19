@@ -33,5 +33,7 @@ int main(int argc, char** argv)
     RunBenchmark<NUM_BINS, BLOCK_SIZE>("Shared Atomic", histogram_shared_atomic<NUM_BINS>, num_elements);
     RunBenchmark<NUM_BINS, BLOCK_SIZE>("Warp Private", histogram_warp_private<NUM_BINS, BLOCK_SIZE>, num_elements);
 
+    RunCUBBenchmark<NUM_BINS, BLOCK_SIZE>("CUB DeviceHistogram", num_elements);
+
     return EXIT_SUCCESS;
 }

@@ -205,3 +205,116 @@ void RunBenchmark(
     CHECK_CUDA(cudaEventDestroy(start));
     CHECK_CUDA(cudaEventDestroy(stop));
 }
+
+template<int NUM_BINS, int BLOCK_SIZE>
+void RunCUBBenchmark(
+    const char* label,
+    int num_elements,
+    int warmup_runs = 2,
+    int timed_runs = 10)
+{
+    std::cout << "\n================================================" << std::endl;
+    std::cout << "Testing: " << label << std::endl;
+    std::cout << "================================================" << std::endl;
+
+    size_t data_bytes = num_elements * sizeof(unsigned char);
+    size_t histogram_bytes = NUM_BINS * sizeof(int);
+
+    // Allocate host memory
+    unsigned char* h_data = new unsigned char[num_elements];
+    int* h_gold = new int[NUM_BINS];
+
+    // Allocate device memory
+    unsigned char* d_data;
+    int* d_histogram;
+    CHECK_CUDA(cudaMalloc(&d_data, data_bytes));
+    CHECK_CUDA(cudaMalloc(&d_histogram, histogram_bytes));
+
+    InitializeTestData(h_data, d_data, num_elements, h_gold, NUM_BINS);
+
+    // Get temp storage size
+    size_t temp_storage_bytes = 0;
+    cub::DeviceHistogram::HistogramEven(
+        nullptr, temp_storage_bytes,
+        d_data, d_histogram,
+        NUM_BINS + 1, 0, NUM_BINS,
+        num_elements);
+
+    void* d_temp_storage;
+    CHECK_CUDA(cudaMalloc(&d_temp_storage, temp_storage_bytes));
+
+    // Warmup runs
+    for (int i = 0; i < warmup_runs; ++i) {
+        CHECK_CUDA(cudaMemset(d_histogram, 0, histogram_bytes));
+        cub::DeviceHistogram::HistogramEven(
+            d_temp_storage, temp_storage_bytes,
+            d_data, d_histogram,
+            NUM_BINS + 1, 0, NUM_BINS,
+            num_elements);
+        CHECK_CUDA(cudaDeviceSynchronize());
+    }
+
+    // Verify correctness
+    int* h_histogram = new int[NUM_BINS];
+    CHECK_CUDA(cudaMemcpy(h_histogram, d_histogram, histogram_bytes, cudaMemcpyDeviceToHost));
+
+    if (!VerifyHistogram(h_histogram, h_gold, NUM_BINS)) {
+        std::cout << "FAILED: " << label << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+    std::cout << "Correctness: PASSED" << std::endl;
+
+    // Timed runs
+    cudaEvent_t start, stop;
+    CHECK_CUDA(cudaEventCreate(&start));
+    CHECK_CUDA(cudaEventCreate(&stop));
+
+    std::vector<float> times;
+    for (int i = 0; i < timed_runs; ++i) {
+        CHECK_CUDA(cudaMemset(d_histogram, 0, histogram_bytes));
+
+        CHECK_CUDA(cudaEventRecord(start));
+        cub::DeviceHistogram::HistogramEven(
+            d_temp_storage, temp_storage_bytes,
+            d_data, d_histogram,
+            NUM_BINS + 1, 0, NUM_BINS,
+            num_elements);
+        CHECK_CUDA(cudaEventRecord(stop));
+        CHECK_CUDA(cudaEventSynchronize(stop));
+
+        float time_ms;
+        CHECK_CUDA(cudaEventElapsedTime(&time_ms, start, stop));
+        times.push_back(time_ms);
+    }
+
+    // Calculate statistics
+    float sum_time = 0.0f;
+    float min_time = times[0];
+    float max_time = times[0];
+    for (const float t : times) {
+        sum_time += t;
+        min_time = std::min(t, min_time);
+        max_time = std::max(t, max_time);
+    }
+    float avg_time = sum_time / timed_runs;
+
+    // Calculate bandwidth
+    float bandwidth_gbs = (data_bytes / 1e9) / (avg_time / 1000.0f);
+    float percent_peak = (bandwidth_gbs / GetPeakBandwidth()) * 100.0f;
+
+    // Print results
+    std::cout << "Time (avg/min/max): " 
+              << avg_time << " / " << min_time << " / " << max_time << " ms" << std::endl;
+    std::cout << "Bandwidth: " << bandwidth_gbs << " GB/s (" 
+              << percent_peak << "% of peak)" << std::endl;
+
+    // Cleanup
+    delete[] h_data;
+    delete[] h_gold;
+    delete[] h_histogram;
+    CHECK_CUDA(cudaFree(d_data));
+    CHECK_CUDA(cudaFree(d_histogram));
+    CHECK_CUDA(cudaFree(d_temp_storage));
+    CHECK_CUDA(cudaEventDestroy(start));
+    CHECK_CUDA(cudaEventDestroy(stop));
+}
