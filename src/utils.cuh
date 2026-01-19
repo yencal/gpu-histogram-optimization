@@ -6,6 +6,7 @@
 #include <iostream>
 #include <vector>
 #include <cuda_runtime.h>
+#include <curand.h>
 
 // ============================================================================
 // CUDA ERROR CHECKING
@@ -90,7 +91,7 @@ inline void InitializeTestData(
 
 inline bool VerifyHistogram(const int* output, const int* gold, int num_bins)
 {
-    for (int i = 0; i < n; ++i) {
+    for (int i = 0; i < num_bins; ++i) {
         if (output[i] != gold[i]) {
             std::cerr << "Mismatch at index " << i << ": "
                       << "got " << output[i] << ", expected " << gold[i] << std::endl;
