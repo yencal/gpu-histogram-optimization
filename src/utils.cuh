@@ -63,18 +63,28 @@ inline int GetNumSMs()
 // TEST DATA INITIALIZATION AND VERIFICATION
 // ============================================================================
 
-inline void InitializeTestData(unsigned char* data, int num_elements, int* histogram, int num_bins)
+inline void InitializeTestData(
+    unsigned char* h_data,
+    unsigned char* d_data,
+    int num_elements,
+    int* h_histogram,
+    int num_bins)
 {
-    for (int i = 0; i < num_elements; ++i) {
-        data[i] = rand() % num_bins;
-    }
+    // Generate directly into benchmark buffer
+    curandGenerator_t gen;
+    curandCreateGenerator(&gen, CURAND_RNG_PSEUDO_DEFAULT);
+    curandSetPseudoRandomGeneratorSeed(gen, 1234ULL);
+    curandGenerate(gen, reinterpret_cast<unsigned int*>(d_data), 
+                   (num_elements + 3) / 4);
+    curandDestroyGenerator(gen);
 
-    for (int bin = 0; bin < num_bins; ++bin) {
-        histogram[bin] = 0;
-    }
+    // Copy to host for reference histogram
+    CHECK_CUDA(cudaMemcpy(h_data, d_data, num_elements, cudaMemcpyDeviceToHost));
 
+    // Compute reference
+    memset(h_histogram, 0, num_bins * sizeof(int));
     for (int i = 0; i < num_elements; ++i) {
-        histogram[data[i]]++;
+        h_histogram[h_data[i]]++;
     }
 }
 
@@ -94,12 +104,11 @@ inline bool VerifyHistogram(const int* output, const int* gold, int num_bins)
 // BENCHMARK RUNNER
 // ============================================================================
 
-template<typename HistogramKernel>
+template<int NUM_BINS, int BLOCK_SIZE>
 void RunBenchmark(
     const char* label,
+    void (*histogram_kernel)(const unsigned char*, int, int*),
     int num_elements,
-    int num_bins,
-    int block_size,
     int warmup_runs = 2,
     int timed_runs = 10)
 {
@@ -109,38 +118,38 @@ void RunBenchmark(
 
 
     size_t data_bytes = num_elements * sizeof(unsigned char);
-    size_t histogram_bytes = num_bins * sizeof(int);
+    size_t histogram_bytes = NUM_BINS * sizeof(int);
 
-    // Allocate and initialize host memory
+    // Allocate host memory
     unsigned char* h_data = new unsigned char[num_elements];
-    int* h_gold = new int[num_bins];
-    InitializeTestData(h_data, num_elements, h_gold, num_bins);
+    int* h_gold = new int[NUM_BINS];
 
     // Allocate device memory
     unsigned char* d_data;
     int* d_histogram;
     CHECK_CUDA(cudaMalloc(&d_data, data_bytes));
     CHECK_CUDA(cudaMalloc(&d_histogram, histogram_bytes));
-    CHECK_CUDA(cudaMemcpy(d_data, h_data, data_bytes, cudaMemcpyHostToDevice));
+    
+    InitializeTestData(h_data, d_data, num_elements, h_gold, NUM_BINS);
 
     // Kernel launch configuration
     const int max_grid_size = GetNumSMs() * 32;
-    int grid_size = (num_elements + block_size - 1)/ block_size;
+    int grid_size = (num_elements + BLOCK_SIZE - 1)/ BLOCK_SIZE;
     grid_size = std::min(grid_size, max_grid_size);
 
     // Warmup runs
     for (int i = 0; i < warmup_runs; ++i) {
-        cudaMemset(d_histogram, 0, histogram_bytes);
-        HistogramKernel<<<grid_size, block_size>>>(d_data, num_elements, d_histogram, num_bins);
+        CHECK_CUDA(cudaMemset(d_histogram, 0, histogram_bytes));
+        histogram_kernel<<<grid_size, BLOCK_SIZE>>>(d_data, num_elements, d_histogram);
         CHECK_CUDA(cudaGetLastError());
         CHECK_CUDA(cudaDeviceSynchronize());
     }
 
     // Verify correctness (fail fast)
-    int* h_histogram = new int[num_bins];
+    int* h_histogram = new int[NUM_BINS];
     CHECK_CUDA(cudaMemcpy(h_histogram, d_histogram, histogram_bytes, cudaMemcpyDeviceToHost));
 
-    if (!VerifyHistogram(h_histogram, h_gold, num_bins)) {
+    if (!VerifyHistogram(h_histogram, h_gold, NUM_BINS)) {
         std::cout << "FAILED: " << label << std::endl;
         std::exit(EXIT_FAILURE);
     }
@@ -153,10 +162,10 @@ void RunBenchmark(
 
     std::vector<float> times;
     for (int i = 0; i < timed_runs; ++i) {
-        cudaMemset(d_histogram, 0, histogram_bytes);
+        CHECK_CUDA(cudaMemset(d_histogram, 0, histogram_bytes));
 
         CHECK_CUDA(cudaEventRecord(start));
-        HistogramKernel<<<grid_size, block_size>>>(d_data, num_elements, d_histogram, num_bins);
+        histogram_kernel<<<grid_size, BLOCK_SIZE>>>(d_data, num_elements, d_histogram);
         CHECK_CUDA(cudaEventRecord(stop));
         CHECK_CUDA(cudaEventSynchronize(stop));
 

@@ -29,7 +29,7 @@ __global__ void histogram_shared_atomic(
     }
     __syncthreads();
 
-    for (int i = tid; i < num_elements; i += stride) {
+    for (int i = idx; i < num_elements; i += stride) {
         atomicAdd(&histogram_s[data[i]], 1);
     }
     __syncthreads();
