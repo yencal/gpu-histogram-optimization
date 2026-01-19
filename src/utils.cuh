@@ -7,6 +7,7 @@
 #include <vector>
 #include <cuda_runtime.h>
 #include <curand.h>
+#include <cub/cub.cuh>
 
 // ============================================================================
 // CUDA ERROR CHECKING
