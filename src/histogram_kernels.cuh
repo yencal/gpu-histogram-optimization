@@ -63,7 +63,7 @@ __global__ void histogram_warp_private(
     for (int i = idx; i < num_elements; i += stride) {
         atomicAdd(&histogram_s[warp_idx][data[i]], 1);
     }
-    __syncwarp();
+    __syncthreads();
 
     for (int bin = threadIdx.x; bin < NUM_BINS; bin += blockDim.x) {
         int sum = 0;
