@@ -65,10 +65,14 @@ __global__ void histogram_warp_private(
     }
     __syncwarp();
 
-    for (int bin = lane; bin < NUM_BINS; bin += warpSize) {
-        int bin_value = histogram_s[warp_idx][bin];
-        if (bin_value > 0) {
-            atomicAdd(&histogram[bin], bin_value);
+    for (int bin = threadIdx.x; bin < NUM_BINS; bin += blockDim.x) {
+        int sum = 0;
+        for (int w = 0; w < NUM_WARPS; ++w) {
+            sum += histogram_s[w][bin];
+        }
+
+        if (sum > 0) {
+            atomicAdd(&histogram[bin], sum);
         }
     }
 }
