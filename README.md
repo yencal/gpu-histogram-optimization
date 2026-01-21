@@ -13,8 +13,8 @@ Companion code for [GPU Histogram: From Global Atomics to Shared Memory Privatiz
 
 | Algorithm | Time (ms) | Bandwidth | % Peak |
 |-----------|-----------|-----------|--------|
-| Global Atomic | 276.14 | 3.89 GB/s | 0.1% |
-| Shared Atomic | 1.53 | 700.21 GB/s | 20.9% |
+| Global Atomic | 276.13 | 3.89 GB/s | 0.1% |
+| Shared Atomic | 1.53 | 703.10 GB/s | 21.0% |
 | Shared Atomic (vectorized) | 0.47 | 2297.21 GB/s | 68.5% |
 | CUB DeviceHistogram | 0.50 | 2139.35 GB/s | 63.8% |
 
