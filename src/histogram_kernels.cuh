@@ -89,38 +89,3 @@ __global__ void HistogramSharedAtomicVec(
         }
     }
 }
-
-template<int NUM_BINS, int BLOCK_SIZE>
-__global__ void HistogramWarpPrivate(
-    const unsigned char* __restrict__ data,
-    int num_elements,
-    int* __restrict__ histogram)
-{
-    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    const int stride = gridDim.x * blockDim.x;
-    const int warp_idx = threadIdx.x / warpSize;
-    const int lane = threadIdx.x % warpSize;
-    constexpr int NUM_WARPS = BLOCK_SIZE / 32;
-
-    __shared__ int histogram_s[NUM_WARPS][NUM_BINS];
-    for (int bin = lane; bin < NUM_BINS; bin += warpSize) {
-        histogram_s[warp_idx][bin] = 0;
-    }
-    __syncwarp();
-
-    for (int i = idx; i < num_elements; i += stride) {
-        atomicAdd(&histogram_s[warp_idx][data[i]], 1);
-    }
-    __syncthreads();
-
-    for (int bin = threadIdx.x; bin < NUM_BINS; bin += blockDim.x) {
-        int sum = 0;
-        for (int w = 0; w < NUM_WARPS; ++w) {
-            sum += histogram_s[w][bin];
-        }
-
-        if (sum > 0) {
-            atomicAdd(&histogram[bin], sum);
-        }
-    }
-}

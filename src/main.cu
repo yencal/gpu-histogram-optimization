@@ -31,10 +31,13 @@ int main(int argc, char** argv)
 
     RunBenchmark<NUM_BINS, BLOCK_SIZE>("Global Atomic", HistogramGlobalAtomic<NUM_BINS>, num_elements);
     RunBenchmark<NUM_BINS, BLOCK_SIZE>("Shared Atomic", HistogramSharedAtomic<NUM_BINS>, num_elements);
-    RunBenchmark<NUM_BINS, BLOCK_SIZE>("Warp Private", HistogramWarpPrivate<NUM_BINS, BLOCK_SIZE>, num_elements);
     RunBenchmark<NUM_BINS, BLOCK_SIZE>("Shared Atomic Vectorized", HistogramSharedAtomicVec<NUM_BINS>, num_elements);
 
     RunCUBBenchmark<NUM_BINS, BLOCK_SIZE>("CUB DeviceHistogram", num_elements);
+
+    std::cout << "\n========================================" << std::endl;
+    std::cout << "Benchmark complete" << std::endl;
+    std::cout << "========================================" << std::endl;
 
     return EXIT_SUCCESS;
 }
