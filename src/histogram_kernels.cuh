@@ -30,7 +30,7 @@ __global__ void HistogramSharedAtomic(
     }
     __syncthreads();
 
-    // Accumulate block histogram
+    // Accumulate into shared memory
     for (int i = idx; i < num_elements; i += stride) {
         atomicAdd(&histogram_s[data[i]], 1);
     }
